@@ -1,10 +1,11 @@
 package com.spendsense.spendsense_backend.controller;
 
 import com.spendsense.spendsense_backend.entity.Transaction;
+import com.spendsense.spendsense_backend.service.CategorySuggestionService;
 import com.spendsense.spendsense_backend.service.TransactionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import com.spendsense.spendsense_backend.service.CategorySuggestionService;
 import java.util.List;
 
 @RestController
@@ -13,10 +14,14 @@ import java.util.List;
 public class TransactionController {
 
     private final TransactionService transactionService;
+    private final CategorySuggestionService categorySuggestionService;
+    public TransactionController(
+        TransactionService transactionService,
+        CategorySuggestionService categorySuggestionService) {
 
-    public TransactionController(TransactionService transactionService) {
-        this.transactionService = transactionService;
-    }
+    this.transactionService = transactionService;
+    this.categorySuggestionService = categorySuggestionService;
+}
 
     // Create a transaction
     @PostMapping
@@ -63,4 +68,13 @@ public class TransactionController {
 
         return ResponseEntity.noContent().build();
     }
+    @GetMapping("/suggest-category")
+public String suggestCategory(
+        @RequestParam String title,
+        @RequestParam String description) {
+
+    String combinedText = title + " " + description;
+
+    return categorySuggestionService.suggestCategory(combinedText);
+}
 }
