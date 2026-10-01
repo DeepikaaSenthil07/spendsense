@@ -13,12 +13,14 @@ function App() {
   const [transactions, setTransactions] = useState([]);
   const [editingId, setEditingId] = useState(null);
 
+  const [categorySuggestion, setCategorySuggestion] = useState(null);
+  const [isSuggestingCategory, setIsSuggestingCategory] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('ALL');
   const [filterCategory, setFilterCategory] = useState('ALL');
-  const [suggestedCategory, setSuggestedCategory] = useState('');
-  const formSectionRef = useRef(null);
 
+  const formSectionRef = useRef(null);
+  const suggestionRequestRef = useRef(0);
   const [formData, setFormData] = useState({
     title: '',
     amount: '',
@@ -28,7 +30,10 @@ function App() {
     date: ''
   });
 
-  // Fetch all transactions
+  // =========================
+  // FETCH TRANSACTIONS
+  // =========================
+
   const fetchTransactions = async () => {
     try {
       const response = await fetch(
@@ -46,49 +51,134 @@ function App() {
     }
   };
 
-  // Load transactions when page opens
   useEffect(() => {
     fetchTransactions();
   }, []);
 
-  // Handle form input
+  // =========================
+  // FORM HANDLING
+  // =========================
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       [name]: value
-    });
+    }));
   };
-const suggestCategory = async (title, description) => {
+
+  // =========================
+  // CATEGORY SUGGESTION
+  // =========================
+
+  const getCategorySuggestion = async (title, description) => {
   if (!title.trim() && !description.trim()) {
-    setSuggestedCategory('');
+    setCategorySuggestion(null);
+    setIsSuggestingCategory(false);
     return;
   }
 
+  const requestId = ++suggestionRequestRef.current;
+
+  setIsSuggestingCategory(true);
+
   try {
     const response = await fetch(
-      `http://localhost:8080/transactions/suggest-category?title=${encodeURIComponent(
+      `http://localhost:8080/transactions/suggest-category-details?title=${encodeURIComponent(
         title
       )}&description=${encodeURIComponent(description)}`
     );
 
-    if (response.ok) {
-      const category = await response.text();
-      setSuggestedCategory(category);
+    if (!response.ok) {
+      throw new Error("Failed to get category suggestion");
     }
+
+    const data = await response.json();
+
+    if (requestId !== suggestionRequestRef.current) {
+      return;
+    }
+
+    setCategorySuggestion(data);
   } catch (error) {
-    console.error(
-      'Error suggesting category:',
-      error
-    );
+    if (requestId !== suggestionRequestRef.current) {
+      return;
+    }
+
+    console.error("Category suggestion error:", error);
+    setCategorySuggestion(null);
+  } finally {
+    if (requestId === suggestionRequestRef.current) {
+      setIsSuggestingCategory(false);
+    }
   }
 };
-  // Submit new transaction
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+useEffect(() => {
+  const title = formData.title.trim();
+  const description = formData.description.trim();
 
-    try {
+  if (!title && !description) {
+    setCategorySuggestion(null);
+    return;
+  }
+
+  const timer = setTimeout(() => {
+    getCategorySuggestion(title, description);
+  }, 500);
+
+  return () => clearTimeout(timer);
+}, [formData.title, formData.description]);
+
+  // =========================
+  // SUBMIT NEW TRANSACTION
+  // =========================
+  const validateTransaction = () => {
+  const title = formData.title.trim();
+  const amount = Number(formData.amount);
+  const category = formData.category;
+  const date = formData.date;
+
+  if (!title) {
+    alert('Please enter a transaction title.');
+    return false;
+  }
+
+  if (!formData.amount || isNaN(amount) || amount <= 0) {
+    alert('Amount must be greater than zero.');
+    return false;
+  }
+
+  if (!category) {
+    alert('Please select a category.');
+    return false;
+  }
+
+  if (!date) {
+    alert('Please select a date.');
+    return false;
+  }
+
+  const selectedDate = new Date(`${date}T00:00:00`);
+  const today = new Date();
+
+  today.setHours(0, 0, 0, 0);
+
+  if (selectedDate > today) {
+    alert('Transaction date cannot be in the future.');
+    return false;
+  }
+
+  return true;
+};
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  if (!validateTransaction()) {
+    return;
+  }
+
+  try {
       const response = await fetch(
         'http://localhost:8080/transactions',
         {
@@ -122,13 +212,18 @@ const suggestCategory = async (title, description) => {
         date: ''
       });
 
+      setCategorySuggestion(null);
+
     } catch (error) {
       console.error('Error adding transaction:', error);
       alert('Could not save transaction.');
     }
   };
 
-  // Delete transaction
+  // =========================
+  // DELETE TRANSACTION
+  // =========================
+
   const handleDelete = async (id) => {
     const confirmDelete = window.confirm(
       'Are you sure you want to delete this transaction?'
@@ -164,7 +259,10 @@ const suggestCategory = async (title, description) => {
     }
   };
 
-  // Start editing a transaction
+  // =========================
+  // EDIT TRANSACTION
+  // =========================
+
   const handleEdit = (transaction) => {
     setEditingId(transaction.id);
 
@@ -177,6 +275,8 @@ const suggestCategory = async (title, description) => {
       date: transaction.date || ''
     });
 
+    setCategorySuggestion(null);
+
     setTimeout(() => {
       formSectionRef.current?.scrollIntoView({
         behavior: 'smooth',
@@ -185,11 +285,18 @@ const suggestCategory = async (title, description) => {
     }, 100);
   };
 
-  // Update existing transaction
-  const handleUpdate = async (e) => {
-    e.preventDefault();
+  // =========================
+  // UPDATE TRANSACTION
+  // =========================
 
-    try {
+  const handleUpdate = async (e) => {
+  e.preventDefault();
+
+  if (!validateTransaction()) {
+    return;
+  }
+
+  try {
       const response = await fetch(
         `http://localhost:8080/transactions/${editingId}`,
         {
@@ -228,13 +335,18 @@ const suggestCategory = async (title, description) => {
         date: ''
       });
 
+      setCategorySuggestion(null);
+
     } catch (error) {
       console.error('Error updating transaction:', error);
       alert('Could not update transaction.');
     }
   };
 
-  // Cancel editing
+  // =========================
+  // CANCEL EDIT
+  // =========================
+
   const handleCancelEdit = () => {
     setEditingId(null);
 
@@ -246,6 +358,8 @@ const suggestCategory = async (title, description) => {
       description: '',
       date: ''
     });
+
+    setCategorySuggestion(null);
   };
 
   // =========================
@@ -297,7 +411,7 @@ const suggestCategory = async (title, description) => {
         total + Number(transaction.amount),
       0
     );
-
+ 
   // =========================
   // CATEGORY TOTALS
   // =========================
@@ -309,20 +423,126 @@ const suggestCategory = async (title, description) => {
       (transaction) => transaction.type === 'EXPENSE'
     )
     .forEach((transaction) => {
-      const category = transaction.category;
+      const category = transaction.category || 'OTHER';
 
       categoryTotals[category] =
         (categoryTotals[category] || 0) +
         Number(transaction.amount);
     });
+    // =========================
+// MONTHLY SPENDING
+// =========================
 
-  // Data used by pie chart
+const monthlyTotals = {};
+
+transactions
+  .filter((transaction) => transaction.type === 'EXPENSE')
+  .forEach((transaction) => {
+    if (!transaction.date) {
+      return;
+    }
+
+    const month = transaction.date.substring(0, 7);
+
+    monthlyTotals[month] =
+      (monthlyTotals[month] || 0) +
+      Number(transaction.amount);
+  });
+
+const monthlyData = Object.entries(monthlyTotals)
+  .sort(([monthA], [monthB]) => monthA.localeCompare(monthB))
+  .map(([month, amount]) => ({
+    month,
+    amount
+  }));
+// =========================
+// FINANCIAL INSIGHTS
+// =========================
+
+const expenseTransactions = transactions.filter(
+  (transaction) => transaction.type === 'EXPENSE'
+);
+
+const largestExpense = expenseTransactions.reduce(
+  (largest, transaction) => {
+    if (!largest || Number(transaction.amount) > Number(largest.amount)) {
+      return transaction;
+    }
+
+    return largest;
+  },
+  null
+);
+
+const averageExpense =
+  expenseTransactions.length > 0
+    ? totalExpense / expenseTransactions.length
+    : 0;
+
+const largestCategory =
+  Object.entries(categoryTotals).length > 0
+    ? Object.entries(categoryTotals).reduce(
+        (largest, current) =>
+          current[1] > largest[1] ? current : largest
+      )
+    : null;
+    <section className="monthly-section">
+  <h2>Monthly Spending</h2>
+
+  {monthlyData.length === 0 ? (
+    <p className="empty-message">
+      No monthly spending data available yet.
+    </p>
+  ) : (
+    <div className="monthly-grid">
+      {monthlyData.map(({ month, amount }) => {
+        const [year, monthNumber] = month.split('-');
+
+        const monthName = new Date(
+          Number(year),
+          Number(monthNumber) - 1
+        ).toLocaleString('en-US', {
+          month: 'long',
+          year: 'numeric'
+        });
+
+        return (
+          <div
+            className="monthly-card"
+            key={month}
+          >
+            <h3>{monthName}</h3>
+
+            <p>
+              ₹{amount.toFixed(2)}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  )}
+</section>
+  // =========================
+  // PIE CHART DATA
+  // =========================
+
   const chartData = Object.entries(categoryTotals).map(
     ([category, amount]) => ({
       name: category,
       value: amount
     })
   );
+
+  const chartColors = [
+    '#6366f1',
+    '#22c55e',
+    '#f59e0b',
+    '#ef4444',
+    '#06b6d4',
+    '#a855f7',
+    '#ec4899',
+    '#84cc16'
+  ];
 
   // =========================
   // SEARCH & FILTER
@@ -355,6 +575,10 @@ const suggestCategory = async (title, description) => {
       );
     }
   );
+
+  // =========================
+  // RENDER
+  // =========================
 
   return (
     <div className="app">
@@ -445,7 +669,99 @@ const suggestCategory = async (title, description) => {
           </div>
 
         </section>
+        <section className="insights-section">
+  <h2>Financial Insights</h2>
 
+  <div className="insight-grid">
+
+    <div className="insight-card">
+      <span>Top Spending Category</span>
+
+      <h3>
+        {largestCategory
+          ? largestCategory[0]
+          : 'No data'}
+      </h3>
+
+      <p>
+        {largestCategory
+          ? `₹${Number(largestCategory[1]).toFixed(2)} spent`
+          : 'Add expenses to see insights.'}
+      </p>
+    </div>
+
+    <div className="insight-card">
+      <span>Largest Expense</span>
+
+      <h3>
+        {largestExpense
+          ? largestExpense.title
+          : 'No data'}
+      </h3>
+
+      <p>
+        {largestExpense
+          ? `₹${Number(largestExpense.amount).toFixed(2)}`
+          : 'Add expenses to see insights.'}
+      </p>
+    </div>
+
+    <div className="insight-card">
+      <span>Average Expense</span>
+
+      <h3>
+        ₹{averageExpense.toFixed(2)}
+      </h3>
+
+      <p>
+        Based on {expenseTransactions.length} expense
+        {expenseTransactions.length === 1 ? '' : 's'}
+      </p>
+    </div>
+
+  </div>
+</section>
+        {/* =========================
+            MONTHLY SPENDING
+        ========================= */}
+
+        <section className="monthly-section">
+          <h2>Monthly Spending</h2>
+
+          {monthlyData.length === 0 ? (
+            <p className="empty-message">
+              No monthly spending data available yet.
+            </p>
+          ) : (
+            <div className="monthly-grid">
+              {monthlyData.map(({ month, amount }) => {
+                const [year, monthNumber] =
+                  month.split('-');
+
+                const monthName = new Date(
+                  Number(year),
+                  Number(monthNumber) - 1
+                ).toLocaleString('en-US', {
+                  month: 'long',
+                  year: 'numeric'
+                });
+
+                return (
+                  <div
+                    className="monthly-card"
+                    key={month}
+                  >
+                    <h3>{monthName}</h3>
+
+                    <p>
+                      ₹{amount.toFixed(2)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
         {/* =========================
             TRANSACTION FORM
         ========================= */}
@@ -469,28 +785,23 @@ const suggestCategory = async (title, description) => {
             }
           >
 
+            {/* Title */}
+
             <input
-              type="text"
-              name="title"
-              placeholder="Transaction title"
-              value={formData.title}
-              onChange={(e) => {
-  const value = e.target.value;
-
-  const updatedFormData = {
+  type="text"
+  name="title"
+  placeholder="Transaction title"
+  value={formData.title}
+  onChange={(e) => {
+  setFormData({
     ...formData,
-    title: value
-  };
-
-  setFormData(updatedFormData);
-
-  suggestCategory(
-    value,
-    formData.description
-  );
+    title: e.target.value
+  });
 }}
-              required
-            />
+  required
+/>
+
+            {/* Amount */}
 
             <input
               type="number"
@@ -499,9 +810,11 @@ const suggestCategory = async (title, description) => {
               value={formData.amount}
               onChange={handleChange}
               step="0.01"
-              min="0"
+              min="0.01"
               required
             />
+
+            {/* Type */}
 
             <select
               name="type"
@@ -519,6 +832,8 @@ const suggestCategory = async (title, description) => {
               </option>
 
             </select>
+
+            {/* Category */}
 
             <select
               name="category"
@@ -565,6 +880,8 @@ const suggestCategory = async (title, description) => {
 
             </select>
 
+            {/* Date */}
+
             <input
               type="date"
               name="date"
@@ -573,46 +890,102 @@ const suggestCategory = async (title, description) => {
               required
             />
 
+            {/* Description */}
+
             <textarea
-  placeholder="Description"
-  value={formData.description}
-  onChange={(e) => {
-  const value = e.target.value;
-
-  const updatedFormData = {
+              name="description"
+              placeholder="Description"
+              value={formData.description}
+              onChange={(e) => {
+  setFormData({
     ...formData,
-    description: value
-  };
-
-  setFormData(updatedFormData);
-
-  suggestCategory(
-    formData.title,
-    value
-  );
+    description: e.target.value
+  });
 }}
-/>
+            />
 
-{suggestedCategory && (
-  <div className="category-suggestion">
-    <span>
-      Suggested category: <strong>{suggestedCategory}</strong>
-    </span>
-
-    <button
-      type="button"
-      className="use-suggestion-btn"
-      onClick={() => {
-        setFormData({
-          ...formData,
-          category: suggestedCategory
-        });
-      }}
-    >
-      Use {suggestedCategory}
-    </button>
+            {/* =========================
+                CATEGORY SUGGESTION
+            ========================= */}
+            {isSuggestingCategory && (
+  <div className="category-suggestion analyzing">
+    <span>Analyzing transaction...</span>
   </div>
 )}
+            {categorySuggestion && (
+  <div className="category-suggestion">
+    <div className="suggestion-info">
+      <div>
+        Suggested category:{' '}
+        <strong>{categorySuggestion.category}</strong>
+      </div>
+
+      <div className="confidence-section">
+  <div className="confidence-header">
+    <span>Confidence</span>
+
+    <strong>
+      {Math.round(categorySuggestion.confidence * 100)}%
+    </strong>
+  </div>
+
+  <div className="confidence-bar">
+    <div
+      className="confidence-fill"
+      style={{
+        width: `${Math.min(
+          categorySuggestion.confidence * 100,
+          100
+        )}%`
+      }}
+    />
+  </div>
+</div>
+
+      {categorySuggestion.matchedKeywords?.length > 0 && (
+        <div>
+          Matched keywords:{' '}
+          <strong>
+            {categorySuggestion.matchedKeywords.join(', ')}
+          </strong>
+        </div>
+      )}
+
+      <div>
+        {categorySuggestion.reason}
+      </div>
+    </div>
+
+    <div className="suggestion-actions">
+      <button
+        type="button"
+        className="use-suggestion-btn"
+        onClick={() => {
+          setFormData({
+            ...formData,
+            category: categorySuggestion.category
+          });
+
+          setCategorySuggestion(null);
+        }}
+      >
+        Use {categorySuggestion.category}
+      </button>
+
+      <button
+        type="button"
+        className="dismiss-suggestion-btn"
+        onClick={() => {
+          setCategorySuggestion(null);
+        }}
+      >
+        Dismiss
+      </button>
+    </div>
+  </div>
+)}
+
+            {/* Form Actions */}
 
             <div className="form-actions">
 
@@ -728,19 +1101,17 @@ const suggestCategory = async (title, description) => {
 
                     {chartData.map(
                       (entry, index) => (
+
                         <Cell
                           key={`cell-${index}`}
-                          fill={[
-                            '#6366f1',
-                            '#22c55e',
-                            '#f59e0b',
-                            '#ef4444',
-                            '#06b6d4',
-                            '#a855f7',
-                            '#ec4899',
-                            '#84cc16'
-                          ][index % 8]}
+                          fill={
+                            chartColors[
+                              index %
+                              chartColors.length
+                            ]
+                          }
                         />
+
                       )
                     )}
 
@@ -855,6 +1226,7 @@ const suggestCategory = async (title, description) => {
 
             <button
               className="clear-filter-btn"
+              type="button"
               onClick={() => {
                 setSearchTerm('');
                 setFilterType('ALL');
@@ -895,9 +1267,7 @@ const suggestCategory = async (title, description) => {
                       </h3>
 
                       <span className="transaction-type">
-
                         {transaction.type}
-
                       </span>
 
                     </div>
@@ -912,33 +1282,40 @@ const suggestCategory = async (title, description) => {
                     </p>
 
                     <p>
+
                       <strong>
                         Category:
                       </strong>{' '}
 
                       {transaction.category}
+
                     </p>
 
                     <p>
+
                       <strong>
                         Description:
                       </strong>{' '}
 
                       {transaction.description ||
                         'No description'}
+
                     </p>
 
                     <p>
+
                       <strong>
                         Date:
                       </strong>{' '}
 
                       {transaction.date}
+
                     </p>
 
                     <div className="transaction-actions">
 
                       <button
+                        type="button"
                         className="edit-btn"
                         onClick={() =>
                           handleEdit(transaction)
@@ -948,9 +1325,12 @@ const suggestCategory = async (title, description) => {
                       </button>
 
                       <button
+                        type="button"
                         className="delete-btn"
                         onClick={() =>
-                          handleDelete(transaction.id)
+                          handleDelete(
+                            transaction.id
+                          )
                         }
                       >
                         Delete

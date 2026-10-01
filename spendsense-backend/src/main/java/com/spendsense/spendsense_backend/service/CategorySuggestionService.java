@@ -2,138 +2,250 @@ package com.spendsense.spendsense_backend.service;
 
 import org.springframework.stereotype.Service;
 
+import com.spendsense.spendsense_backend.entity.CategorySuggestionResponse;
+import java.util.HashMap;
+import java.util.Map;
+
 @Service
 public class CategorySuggestionService {
 
     public String suggestCategory(String text) {
 
+        Map<String, Integer> scores = calculateScores(text);
+
+        String bestCategory = "OTHER";
+        int highestScore = 0;
+
+        for (Map.Entry<String, Integer> entry : scores.entrySet()) {
+
+            if (entry.getValue() > highestScore) {
+                highestScore = entry.getValue();
+                bestCategory = entry.getKey();
+            }
+        }
+
+        return bestCategory;
+    }
+
+    public Map<String, Integer> calculateScores(String text) {
+
+        Map<String, Integer> scores = new HashMap<>();
+
+        scores.put("FOOD", 0);
+        scores.put("TRANSPORT", 0);
+        scores.put("EDUCATION", 0);
+        scores.put("SHOPPING", 0);
+        scores.put("ENTERTAINMENT", 0);
+        scores.put("HEALTH", 0);
+        scores.put("BILLS", 0);
+
         if (text == null || text.trim().isEmpty()) {
-            return "OTHER";
+            return scores;
         }
 
         String input = text.toLowerCase();
 
-        // Food
-        if (containsAny(input,
-                "food",
-                "lunch",
-                "dinner",
-                "breakfast",
-                "restaurant",
-                "cafe",
-                "coffee",
-                "tea",
-                "snack",
-                "pizza",
-                "burger",
-                "meal")) {
+        // FOOD
+        scores.put("FOOD",
+                weightedScore(input,
+                        new String[]{
+                                "lunch",
+                                "dinner",
+                                "breakfast",
+                                "restaurant",
+                                "pizza",
+                                "burger",
+                                "meal",
+                                "cafe",
+                                "coffee",
+                                "snack"
+                        },
+                        3,
+                        new String[]{
+                                "food",
+                                "tea"
+                        },
+                        1));
 
-            return "FOOD";
-        }
+        // TRANSPORT
+        scores.put("TRANSPORT",
+                weightedScore(input,
+                        new String[]{
+                                "uber",
+                                "ola",
+                                "taxi",
+                                "cab",
+                                "bus",
+                                "train",
+                                "metro",
+                                "petrol",
+                                "fuel",
+                                "auto",
+                                "flight"
+                        },
+                        3,
+                        new String[]{
+                                "travel",
+                                "transport",
+                                "ride",
+                                "trip"
+                        },
+                        1));
 
-        // Transport
-        if (containsAny(input,
-                "uber",
-                "ola",
-                "bus",
-                "train",
-                "metro",
-                "auto",
-                "cab",
-                "taxi",
-                "petrol",
-                "fuel",
-                "transport",
-                "travel")) {
+        // EDUCATION
+        scores.put("EDUCATION",
+                weightedScore(input,
+                        new String[]{
+                                "tuition",
+                                "course",
+                                "education",
+                                "udemy",
+                                "exam fee",
+                                "college fee",
+                                "school fee",
+                                "certificate"
+                        },
+                        3,
+                        new String[]{
+                                "college",
+                                "school",
+                                "book",
+                                "study",
+                                "textbook"
+                        },
+                        1));
 
-            return "TRANSPORT";
-        }
+        // SHOPPING
+        scores.put("SHOPPING",
+                weightedScore(input,
+                        new String[]{
+                                "shopping",
+                                "purchase",
+                                "amazon",
+                                "flipkart"
+                        },
+                        3,
+                        new String[]{
+                                "shirt",
+                                "dress",
+                                "clothes",
+                                "shoes",
+                                "bag"
+                        },
+                        1));
 
-        // Education
-        if (containsAny(input,
-                "book",
-                "course",
-                "college",
-                "school",
-                "tuition",
-                "exam",
-                "education",
-                "udemy",
-                "certificate")) {
+        // ENTERTAINMENT
+        scores.put("ENTERTAINMENT",
+                weightedScore(input,
+                        new String[]{
+                                "movie",
+                                "cinema",
+                                "netflix",
+                                "spotify",
+                                "concert",
+                                "game"
+                        },
+                        3,
+                        new String[]{
+                                "entertainment"
+                        },
+                        1));
 
-            return "EDUCATION";
-        }
+        // HEALTH
+        scores.put("HEALTH",
+                weightedScore(input,
+                        new String[]{
+                                "doctor",
+                                "hospital",
+                                "medicine",
+                                "pharmacy",
+                                "clinic",
+                                "medical"
+                        },
+                        3,
+                        new String[]{
+                                "health"
+                        },
+                        1));
 
-        // Shopping
-        if (containsAny(input,
-                "shirt",
-                "dress",
-                "clothes",
-                "shopping",
-                "amazon",
-                "flipkart",
-                "shoes",
-                "bag",
-                "purchase")) {
+        // BILLS
+        scores.put("BILLS",
+                weightedScore(input,
+                        new String[]{
+                                "electricity",
+                                "rent",
+                                "internet",
+                                "wifi",
+                                "phone bill",
+                                "mobile bill"
+                        },
+                        3,
+                        new String[]{
+                                "bill",
+                                "recharge",
+                                "water bill"
+                        },
+                        1));
 
-            return "SHOPPING";
-        }
+        return scores;
+    }
+    public CategorySuggestionResponse getSuggestionDetails(String text) {
 
-        // Entertainment
-        if (containsAny(input,
-                "movie",
-                "cinema",
-                "netflix",
-                "spotify",
-                "game",
-                "concert",
-                "entertainment")) {
+    Map<String, Integer> scores = calculateScores(text);
 
-            return "ENTERTAINMENT";
-        }
+    String bestCategory = "OTHER";
+    int highestScore = 0;
+    int totalScore = 0;
 
-        // Health
-        if (containsAny(input,
-                "medicine",
-                "doctor",
-                "hospital",
-                "pharmacy",
-                "health",
-                "medical",
-                "clinic")) {
-
-            return "HEALTH";
-        }
-
-        // Bills
-        if (containsAny(input,
-                "electricity",
-                "water bill",
-                "internet",
-                "wifi",
-                "phone bill",
-                "mobile bill",
-                "rent",
-                "bill",
-                "recharge")) {
-
-            return "BILLS";
-        }
-
-        return "OTHER";
+    for (int score : scores.values()) {
+        totalScore += score;
     }
 
-    private boolean containsAny(
-            String input,
-            String... keywords) {
+    for (Map.Entry<String, Integer> entry : scores.entrySet()) {
 
-        for (String keyword : keywords) {
+        if (entry.getValue() > highestScore) {
+            highestScore = entry.getValue();
+            bestCategory = entry.getKey();
+        }
+    }
+
+    int confidence = 0;
+
+    if (totalScore > 0) {
+        confidence = Math.round(
+                ((float) highestScore / totalScore) * 100
+        );
+    }
+
+    return new CategorySuggestionResponse(
+            bestCategory,
+            confidence,
+            scores
+    );
+}
+    private int weightedScore(
+            String input,
+            String[] strongKeywords,
+            int strongWeight,
+            String[] normalKeywords,
+            int normalWeight) {
+
+        int score = 0;
+
+        for (String keyword : strongKeywords) {
 
             if (input.contains(keyword)) {
-                return true;
+                score += strongWeight;
             }
         }
 
-        return false;
+        for (String keyword : normalKeywords) {
+
+            if (input.contains(keyword)) {
+                score += normalWeight;
+            }
+        }
+
+        return score;
     }
 }
